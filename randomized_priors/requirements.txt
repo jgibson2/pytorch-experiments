@@ -1,0 +1,4 @@
+torch
+numpy
+matplotlib
+adabelief-pytorch==0.2.0
