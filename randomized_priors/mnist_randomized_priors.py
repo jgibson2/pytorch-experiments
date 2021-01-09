@@ -138,9 +138,9 @@ def display_incorrect_classifications(models, device, test_loader, display_all=F
                     plt.xticks(np.array(bins[:-1]) + 0.5, [str(n) for n in np.arange(0, 10)])
                     plt.show(block=True)
                     figs += 1
-                confidence_incorrect.append((mode_count / torch.sum(counts)).item())
+                confidence_incorrect.append(torch.div(mode_count.float(), torch.sum(counts)).item())
             else:
-                confidence_correct.append((mode_count / torch.sum(counts)).item())
+                confidence_correct.append(torch.div(mode_count.float(),torch.sum(counts)).item())
     plt.clf()
     plt.subplot(1, 2, 1)
     plt.title(f'Confidences in correct guesses')
@@ -215,7 +215,7 @@ if __name__ == '__main__':
             {'classifier_{}'.format(i): cls.state_dict() for i, cls in enumerate(classifiers)},
             PATH)
     else:
-        saved_models = torch.load(PATH)
+        saved_models = torch.load(PATH, map_location=dev)
         for model_name in saved_models.keys():
             if not re.match(r'classifier_\d+', model_name):
                 continue
