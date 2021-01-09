@@ -50,6 +50,16 @@ class RandomizedPriorNetwork(nn.Module):
                 self.beta))
 
 
+class VotingNetwork(nn.Module):
+    def __init__(self, networks):
+        super().__init__()
+        self.networks = torch.nn.ModuleList(networks)
+
+    def forward(self, x):
+        votes = torch.cat([torch.argmax(n(x), dim=1, keepdim=True) for n in self.networks], dim=1)
+        return votes
+
+
 def loss_batch(model, loss_func, xb, yb, opt=None):
     loss = loss_func(model(xb), yb)
 
@@ -248,10 +258,17 @@ if __name__ == '__main__':
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                               batch_size=BATCH_SIZE, shuffle=True, pin_memory=True)
 
+    combined_classifier = nn.Sequential(
+            VotingNetwork(classifiers),
+            Lambda(lambda x: torch.mode(x, dim=1).values)
+        )
+    combined_classifier.to(dev)
+
     with torch.no_grad():
         losses, nums = zip(
             *[(torch.sum(
-                torch.eq(predict_bootstrapped_random_prior_classifier(classifiers, xb.to(dev)).cpu(), yb).long()),
+               # torch.eq(predict_bootstrapped_random_prior_classifier(classifiers, xb.to(dev)).cpu(), yb).long()),
+               torch.eq(combined_classifier(xb.to(dev)).cpu(), yb).long()),
                yb.size(0)) for xb, yb in test_loader]
         )
     test_loss = np.sum(losses) / np.sum(nums)
