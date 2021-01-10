@@ -2,9 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+    <title>Randomized Priors Demo</title>
 </head>
 <body>
-
+    <div id="canvasContainer">
+        <canvas id="myCanvas" width="400" height="400" style="background-color: black; border:1px solid #000000;"></canvas>
+        <br>
+        <button id="submitBtn">Submit</button>
+        <button id="clearBtn">Clear</button>
+    </div>
 </body>
+<script src="js/jquery-3.5.1.min.js"></script>
+<script src="js/paper-core.js"></script>
+<script src="js/onnx.min.js"></script>
+<script src="js/ndarray-browser-min.js"></script>
+<script src="js/demo.js"></script>
 </html>
