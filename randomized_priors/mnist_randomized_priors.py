@@ -20,7 +20,7 @@ MOMENTUM = 0.9
 BATCH_SIZE = 32
 BOOTSTRAP_PERCENTAGE = 90
 NUM_CLASSIFIERS = 10
-LOAD_MODEL = True
+LOAD_MODEL = False
 PATH = "models/bootstrapped_random_priors_CNN_MNIST.pt"
 
 
@@ -36,10 +36,10 @@ class Lambda(nn.Module):
 class RandomizedPriorNetwork(nn.Module):
     def __init__(self, prior_net, trainable_net, beta=1.0):
         super().__init__()
-        self.prior_net = copy.deepcopy(prior_net)
+        self.prior_net = prior_net
         for param in self.prior_net.parameters():
             param.requires_grad = False
-        self.trainable_net = copy.deepcopy(trainable_net)
+        self.trainable_net = trainable_net
         self.beta = beta
 
     def forward(self, x):
@@ -53,7 +53,7 @@ class RandomizedPriorNetwork(nn.Module):
 class VotingNetwork(nn.Module):
     def __init__(self, networks):
         super().__init__()
-        self.networks = torch.nn.ModuleList(networks)
+        self.networks = networks
 
     def forward(self, x):
         votes = torch.cat([torch.argmax(n(x), dim=1, keepdim=True) for n in self.networks], dim=1)
@@ -182,7 +182,7 @@ if __name__ == '__main__':
         ])
     train_dataset, val_dataset = train_val_set[0], train_val_set[1]
 
-    classifiers = []
+    classifiers = nn.ModuleList()
     if not LOAD_MODEL:
         for i in range(NUM_CLASSIFIERS):
             trainable_model = nn.Sequential(
@@ -193,7 +193,7 @@ if __name__ == '__main__':
                 nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1),
                 nn.ReLU(),
                 nn.AdaptiveAvgPool2d(1),
-                Lambda(lambda x: x.view(x.size(0), -1))
+                nn.Flatten()
             )
 
             prior_model = nn.Sequential(
@@ -202,7 +202,7 @@ if __name__ == '__main__':
                 nn.Conv2d(16, 10, kernel_size=3),
                 nn.ReLU(),
                 nn.AdaptiveAvgPool2d(1),
-                Lambda(lambda x: x.view(x.size(0), -1))
+                nn.Flatten()
             )
             for layer in prior_model:
                 if hasattr(layer, 'weight'):
@@ -238,7 +238,7 @@ if __name__ == '__main__':
                 nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1),
                 nn.ReLU(),
                 nn.AdaptiveAvgPool2d(1),
-                Lambda(lambda x: x.view(x.size(0), -1))
+                nn.Flatten()
             )
 
             prior_model = nn.Sequential(
@@ -247,7 +247,7 @@ if __name__ == '__main__':
                 nn.Conv2d(16, 10, kernel_size=3),
                 nn.ReLU(),
                 nn.AdaptiveAvgPool2d(1),
-                Lambda(lambda x: x.view(x.size(0), -1))
+                nn.Flatten()
             )
 
             cls = RandomizedPriorNetwork(prior_model, trainable_model)
