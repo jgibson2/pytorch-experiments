@@ -1,18 +1,16 @@
 Array.prototype.count = function (val) {
-    return this.reduce((count, item) => count + (item == val), 0)
+    return this.reduce((count, item) => count + (item === val), 0)
 }
 
 window.onload = function () {
     paper.setup('myCanvas');
-    // Create a simple drawing tool:
-    let tool = new paper.Tool();
     let path;
     let c = document.getElementById("myCanvas");
     let ctx = c.getContext('2d');
 
     let layout = {
         autosize: false,
-        width: 600,
+        width: 800,
         height: 400,
         margin: {
             l: 50,
@@ -31,6 +29,9 @@ window.onload = function () {
             ticktext: [...Array(10).keys()].map(n => n.toString()),
             tickmode: 'array',
             range: [-1, 10]
+        },
+        title: {
+            text:`Classifier Comparison`
         }
     };
 
@@ -39,13 +40,13 @@ window.onload = function () {
             x: [...Array(10).keys()],
             y: Array(10).fill(0),
             type: 'bar',
-            name: 'Randomized Priors'
+            name: 'Standard Network'
         },
         {
             x: [...Array(10).keys()],
             y: Array(10).fill(0),
             type: 'bar',
-            name: 'Standard Network'
+            name: 'Randomized Priors'
         }
     ];
     Plotly.newPlot('chart', data, layout);
@@ -78,6 +79,7 @@ window.onload = function () {
         canvas.height = 28;
 
         // Find bounding rect of drawing
+        let found = false;
         for ( let i = 0; i < drawnImageData.data.length; i+=4 )
         {
             let x = Math.floor( i / 4 ) % w;
@@ -85,6 +87,7 @@ window.onload = function () {
 
             if ( drawnImageData.data[ i ] > 0 || drawnImageData.data[ i + 1 ] > 0 || drawnImageData.data[ i + 2 ] > 0 )
             {
+                found = true;
                 xmin = Math.min( xmin, x );
                 xmax = Math.max( xmax, x );
                 ymin = Math.min( ymin, y );
@@ -93,7 +96,11 @@ window.onload = function () {
         }
         const cropWidth = xmax - xmin;
         const cropHeight = ymax - ymin;
-        crop.width = cropWidth
+        if(!found) {
+            Plotly.update('chart', data, layout);
+            return;
+        }
+        crop.width = cropWidth;
         crop.height = cropHeight;
         cropCtx.drawImage(c, xmin, ymin, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
         const aspectRatio = cropHeight / cropWidth;
@@ -149,35 +156,42 @@ window.onload = function () {
 
     let identity = (o) => {return o;}
 
-    const posteriorOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
-    const mnistOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
-//    posteriorOnnxSession.loadModel("./models/voting_classifier.onnx").then(() => {
-    posteriorOnnxSession.loadModel("./models/combined_classifier.onnx").then(() => {
-        mnistOnnxSession.loadModel("./models/mnist-8.onnx").then(() => {
-            tool.onMouseDown = function (event) {
-                path = new paper.Path();
-                path.strokeColor = 'white';
-                path.strokeWidth = 30;
-                path.strokeCap = 'round';
-                path.strokeJoin = 'round';
-                path.add(event.point);
-            }
+    let loadModels = (doInference) => {
+        let tool = new paper.Tool();
+        const posteriorOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
+        const mnistOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
+        posteriorOnnxSession.loadModel(`./models/combined_classifier.onnx`).then(() => {
+            mnistOnnxSession.loadModel(`./models/mnist-8.onnx`).then(() => {
+                tool.onMouseDown = function (event) {
+                    path = new paper.Path();
+                    path.strokeColor = 'white';
+                    path.strokeWidth = 30;
+                    path.strokeCap = 'round';
+                    path.strokeJoin = 'round';
+                    path.add(event.point);
+                }
 
-            tool.onMouseDrag = function (event) {
-                path.add(event.point);
-            }
+                tool.onMouseDrag = function (event) {
+                    path.add(event.point);
+                }
 
-            tool.onMouseUp = () => {
-                inference(mnistOnnxSession, softmax, 1);
-                inference(posteriorOnnxSession, identity, 0);
-            }
+                tool.onMouseUp = () => {
+                    inference(mnistOnnxSession, softmax, 0);
+                    inference(posteriorOnnxSession, identity, 1);
+                }
 
-            $('#clearBtn').click(() => {
-                paper.project.activeLayer.removeChildren();
-                paper.view.draw();
-                data.forEach(d => {d.y = Array(10).fill(0);});
-                Plotly.update('chart', data, layout);
+                if(doInference) {
+                    tool.onMouseUp();
+                }
             });
         });
+    }
+
+    $('#clearBtn').click(() => {
+        paper.project.activeLayer.removeChildren();
+        paper.view.draw();
+        data.forEach(d => {d.y = Array(10).fill(0);});
+        Plotly.update('chart', data, layout);
     });
+    loadModels( false);
 }

@@ -25,8 +25,24 @@
         </div>
         <div class="col-8 justify-content-start">
             <div>
-                <div>Last input:  <iframe width=40 height=40 id="lastInput" src="" title="Last Input"></iframe></div>
+                <div>Last input:
+                    <iframe
+                            width=40
+                            height=40
+                            id="lastInput"
+                            src=""
+                            title="Last Input"
+                            style="overflow: hidden;"
+                            scrolling="no"
+                    ></iframe>
+                </div>
                 <p id="lastPred">Last prediction: </p>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="softmaxCheck" id="softmaxCheck" checked>
+                    <label class="form-check-label" for="softmaxCheck">
+                        Softmax
+                    </label>
+                </div>
             </div>
         </div>
     </div>

@@ -13,15 +13,15 @@ import matplotlib
 from matplotlib import pyplot as plt
 plt.rcParams["figure.figsize"] = (8,6)
 
-EPOCHS = 20
+EPOCHS = 25
 VAL_PERCENTAGE = 25
 LEARNING_RATE = 0.01
 MOMENTUM = 0.9
 BATCH_SIZE = 32
 BOOTSTRAP_PERCENTAGE = 90
-NUM_CLASSIFIERS = 10
-LOAD_MODEL = True
-PATH = "models/bootstrapped_random_priors_CNN_MNIST.pt"
+NUM_CLASSIFIERS = 12
+LOAD_MODEL = False
+PATH = "models/bootstrapped_random_priors_CNN_MNIST_beta_10.pt"
 
 
 class Lambda(nn.Module):
@@ -34,7 +34,7 @@ class Lambda(nn.Module):
 
 
 class RandomizedPriorNetwork(nn.Module):
-    def __init__(self, prior_net, trainable_net, beta=3.0):
+    def __init__(self, prior_net, trainable_net, beta=1.0):
         super().__init__()
         self.prior_net = prior_net
         for param in self.prior_net.parameters():
@@ -262,7 +262,7 @@ if __name__ == '__main__':
                 nn.Flatten()
             )
 
-            cls = RandomizedPriorNetwork(prior_model, trainable_model)
+            cls = RandomizedPriorNetwork(prior_model, trainable_model, beta=10.0)
             cls.load_state_dict(saved_models[model_name])
             cls.to(dev)
             classifiers.append(cls)

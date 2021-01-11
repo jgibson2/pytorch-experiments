@@ -51,7 +51,7 @@ for model_name in saved_models.keys():
     )
     prior_model.to(dev)
 
-    cls = RandomizedPriorNetwork(prior_model, trainable_model)
+    cls = RandomizedPriorNetwork(prior_model, trainable_model, beta=3.0)
     cls.load_state_dict(saved_models[model_name])
     classifiers.append(cls)
 

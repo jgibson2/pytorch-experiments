@@ -1,10 +1,10 @@
 Array.prototype.count = function (val) {
-    return this.reduce((count, item) => count + (item == val), 0)
+    return this.reduce((count, item) => count + (item === val), 0)
 }
 
 window.onload = function () {
     let minFileIndex = 0;
-    let maxFileIndex = 9;
+    let maxFileIndex = 11;
     let fileIndex = minFileIndex;
 
     paper.setup('myCanvas');
@@ -25,7 +25,7 @@ window.onload = function () {
         },
         yaxis: {
             title: 'Confidence',
-            range: [0, 1]
+            // range: [0, 1]
         },
         xaxis: {
             title: 'Digit',
@@ -104,7 +104,7 @@ window.onload = function () {
             Plotly.update('chart', data, layout);
             return;
         }
-        crop.width = cropWidth
+        crop.width = cropWidth;
         crop.height = cropHeight;
         cropCtx.drawImage(c, xmin, ymin, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
         const aspectRatio = cropHeight / cropWidth;
@@ -160,6 +160,8 @@ window.onload = function () {
 
     let identity = (o) => {return o;}
 
+    let selectedFn = $('#softmaxCheck').prop('checked') ? softmax : identity;
+
     let loadModels = (idx, doInference) => {
         let tool = new paper.Tool();
         const posteriorOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
@@ -180,8 +182,8 @@ window.onload = function () {
                 }
 
                 tool.onMouseUp = () => {
-                    inference(priorOnnxSession, softmax, 0);
-                    inference(posteriorOnnxSession, softmax, 1);
+                    inference(priorOnnxSession, selectedFn, 0);
+                    inference(posteriorOnnxSession, selectedFn, 1);
                 }
 
                 if(doInference) {
@@ -210,5 +212,9 @@ window.onload = function () {
         layout.title.text = `Classifier ${fileIndex}`;
         loadModels(fileIndex, true);
     });
+    $('#softmaxCheck').change(function() {
+        selectedFn = $('#softmaxCheck').prop('checked') ? softmax : identity;
+        loadModels(fileIndex, true);
+    })
     loadModels(minFileIndex, false);
 }
