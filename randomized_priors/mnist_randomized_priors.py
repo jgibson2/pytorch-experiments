@@ -20,7 +20,7 @@ MOMENTUM = 0.9
 BATCH_SIZE = 32
 BOOTSTRAP_PERCENTAGE = 90
 NUM_CLASSIFIERS = 10
-LOAD_MODEL = False
+LOAD_MODEL = True
 PATH = "models/bootstrapped_random_priors_CNN_MNIST.pt"
 
 
@@ -58,6 +58,18 @@ class VotingNetwork(nn.Module):
     def forward(self, x):
         votes = torch.cat([torch.argmax(n(x), dim=1, keepdim=True) for n in self.networks], dim=1)
         return votes
+
+
+class CombinedPosteriorNetwork(nn.Module):
+    def __init__(self, networks):
+        super().__init__()
+        self.networks = networks
+
+    def forward(self, x):
+        sm = [torch.softmax(n(x), dim=1) for n in self.networks]
+        cat = torch.stack(sm, dim=2)
+        res = torch.sum(cat, dim=2)
+        return res
 
 
 def loss_batch(model, loss_func, xb, yb, opt=None):
@@ -258,20 +270,31 @@ if __name__ == '__main__':
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                               batch_size=BATCH_SIZE, shuffle=True, pin_memory=True)
 
-    combined_classifier = nn.Sequential(
+    voting_classifier = nn.Sequential(
             VotingNetwork(classifiers),
             Lambda(lambda x: torch.mode(x, dim=1).values)
         )
+    voting_classifier.to(dev)
+
+    with torch.no_grad():
+        losses, nums = zip(
+            *[(torch.sum(
+               torch.eq(voting_classifier(xb.to(dev)).cpu(), yb).long()),
+               yb.size(0)) for xb, yb in test_loader]
+        )
+    test_loss = np.sum(losses) / np.sum(nums)
+    print(f'Voting test accuracy (post-train): {test_loss * 100.0}% ({np.sum(losses)}/{np.sum(nums)})')
+
+    display_incorrect_classifications(classifiers, dev, test_loader, display_all=True, figure_limit=10)
+
+    combined_classifier = CombinedPosteriorNetwork(classifiers)
     combined_classifier.to(dev)
 
     with torch.no_grad():
         losses, nums = zip(
             *[(torch.sum(
-               # torch.eq(predict_bootstrapped_random_prior_classifier(classifiers, xb.to(dev)).cpu(), yb).long()),
-               torch.eq(combined_classifier(xb.to(dev)).cpu(), yb).long()),
+                torch.eq(torch.argmax(combined_classifier(xb.to(dev)).cpu(), dim=1), yb).long()),
                yb.size(0)) for xb, yb in test_loader]
         )
     test_loss = np.sum(losses) / np.sum(nums)
-    print(f'Test accuracy (post-train): {test_loss * 100.0}% ({np.sum(losses)}/{np.sum(nums)})')
-
-    display_incorrect_classifications(classifiers, dev, test_loader, display_all=True, figure_limit=10)
+    print(f'Combined test accuracy (post-train): {test_loss * 100.0}% ({np.sum(losses)}/{np.sum(nums)})')

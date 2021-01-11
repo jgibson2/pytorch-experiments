@@ -8,6 +8,7 @@ window.onload = function () {
     let tool = new paper.Tool();
     let path;
     let c = document.getElementById("myCanvas");
+    let ctx = c.getContext('2d');
 
     let layout = {
         autosize: false,
@@ -53,14 +54,89 @@ window.onload = function () {
         return new onnx.Tensor(dataProcessed.data, 'float32', [1, 1, width, height]);
     }
 
+    let inference = () => {
+            let crop = document.createElement('canvas');
+            let cropCtx = crop.getContext('2d');
+            let drawnImageData = ctx.getImageData( 0, 0, ctx.canvas.width, ctx.canvas.height );
+
+            let xmin = ctx.canvas.width - 1;
+            let xmax = 0;
+            let ymin = ctx.canvas.height - 1;
+            let ymax = 0;
+            let w = ctx.canvas.width;
+            let h = ctx.canvas.height;
+
+            let canvas = document.createElement('canvas');
+            canvas.width = 28;
+            canvas.height = 28;
+
+            // Find bounding rect of drawing
+            for ( let i = 0; i < drawnImageData.data.length; i+=4 )
+            {
+                let x = Math.floor( i / 4 ) % w;
+                let y = Math.floor( i / ( 4 * w ) );
+
+                if ( drawnImageData.data[ i ] > 0 || drawnImageData.data[ i + 1 ] > 0 || drawnImageData.data[ i + 2 ] > 0 )
+                {
+                    xmin = Math.min( xmin, x );
+                    xmax = Math.max( xmax, x );
+                    ymin = Math.min( ymin, y );
+                    ymax = Math.max( ymax, y );
+                }
+            }
+            const cropWidth = xmax - xmin;
+            const cropHeight = ymax - ymin;
+            crop.width = cropWidth
+            crop.height = cropHeight;
+            cropCtx.drawImage(c, xmin, ymin, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight)
+            const aspectRatio = cropHeight / cropWidth;
+            const pad = 2;
+            let dx; let dy; let dw; let dh;
+            if(aspectRatio > 1.0) {
+                // height > width
+                dh = canvas.height - (2 * pad);
+                dw = Math.round((canvas.width - (2 * pad)) / aspectRatio);
+                dy = pad;
+                dx = pad + Math.round(((canvas.width - (2 * pad)) - dw) / 2.0);
+            } else {
+                // height < width
+                dw = canvas.width - (2 * pad);
+                dh = Math.round((canvas.height - (2 * pad)) * aspectRatio);
+                dx = pad;
+                dy = pad + Math.round(((canvas.height - (2 * pad)) - dw) / 2.0);
+            }
+
+            //grab the context from your destination canvas
+            let destCtx = canvas.getContext('2d');
+            destCtx.fillStyle = "black";
+            destCtx.fillRect(0, 0, canvas.width, canvas.height);
+            destCtx.drawImage(crop, 0, 0, crop.width, crop.height, dx, dy, dw, dh);
+            $('#lastInput').attr('src', canvas.toDataURL());
+            const inferenceInput = preprocess(
+                destCtx.getImageData(0, 0, canvas.width, canvas.height).data,
+                28,
+                28
+            );
+            myOnnxSession.run([inferenceInput]).then((output) => {
+                // consume the output
+                const outputTensor = Array.from(output.values().next().value.data);
+                console.log(`model output tensor: ${outputTensor}.`);
+                data[0].y = [...Array(10).keys()].map(e => outputTensor.count(e));
+                $('#lastPred').text(`Last prediction: ${data[0].y.indexOf(Math.max(...data[0].y))}`);
+                Plotly.update('chart', data, layout);
+            }).catch(err => {
+                console.log(err);
+            });
+        };
+
     const myOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
-    myOnnxSession.loadModel("./models/combined_classifier.onnx").then(() => {
+    myOnnxSession.loadModel("./models/voting_classifier.onnx").then(() => {
         // myOnnxSession.loadModel("./models/mnist-8.onnx").then(() => {
         // Define a mousedown and mousedrag handler
         tool.onMouseDown = function (event) {
             path = new paper.Path();
             path.strokeColor = 'white';
-            path.strokeWidth = 20;
+            path.strokeWidth = 30;
             path.strokeCap = 'round';
             path.strokeJoin = 'round';
             path.add(event.point);
@@ -70,42 +146,9 @@ window.onload = function () {
             path.add(event.point);
         }
 
-        $('#submitBtn').click(() => {
-            let canvas = document.createElement('canvas');
-            canvas.width = 28;
-            canvas.height = 28;
+        tool.onMouseUp = inference;
 
-            //grab the context from your destination canvas
-            let destCtx = canvas.getContext('2d');
-            destCtx.fillStyle = "black";
-            destCtx.fillRect(0, 0, canvas.width, canvas.height);
-            let destImage = new Image();
-            destImage.src = c.toDataURL();
-
-            destImage.onload = () => {
-                destCtx.drawImage(destImage, 0, 0, canvas.width, canvas.height);
-                const inferenceInput = preprocess(
-                    destCtx.getImageData(0, 0, canvas.width, canvas.height).data,
-                    canvas.width,
-                    canvas.height
-                );
-                console.log(inferenceInput)
-                myOnnxSession.run([inferenceInput]).then((output) => {
-                    // consume the output
-                    console.log(output)
-                    const outputTensor = Array.from(output.values().next().value.data);
-                    console.log(`model output tensor: ${outputTensor}.`);
-                    // console.log(`best guess: ${outputTensor.data.indexOf(Math.max(...outputTensor))}`);
-
-                    data[0].y = [...Array(10).keys()].map(e => outputTensor.count(e));
-                    console.log(data)
-                    Plotly.update('chart', data, layout);
-
-                }).catch(err => {
-                    console.log(err);
-                });
-            }
-        });
+//        $('#submitBtn').click(inference);
 
         $('#clearBtn').click(() => {
             paper.project.activeLayer.removeChildren();
