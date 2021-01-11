@@ -9,19 +9,21 @@
 <body>
 <div class="container" id="canvasContainer">
     <div class="row">
-        <div class="col-6 justify-content-end">
+        <div class="col-4 justify-content-end">
             <canvas id="myCanvas" width="400" height="400"
                     style="background-color: black; border:1px solid #000000;"></canvas>
         </div>
-        <div class="col-6 justify-content-start" id="chart" style="float: left;"></div>
+        <div class="col-8 justify-content-start" id="chart" style="float: left;"></div>
     </div>
     <div class="row">
-        <div class="col-6 justify-content-end">
+        <div class="col-4 justify-content-end">
             <div>
                 <button class="btn btn-primary" id="clearBtn" style="margin: 10px 10px 10px 10px;">Clear</button>
+                <button class="btn btn-primary" id="prevBtn" style="margin: 10px 10px 10px 10px;">Previous</button>
+                <button class="btn btn-primary" id="nextBtn" style="margin: 10px 10px 10px 10px;">Next</button>
             </div>
         </div>
-        <div class="col-6 justify-content-start">
+        <div class="col-8 justify-content-start">
             <div>
                 <div>Last input:  <iframe width=40 height=40 id="lastInput" src="" title="Last Input"></iframe></div>
                 <p id="lastPred">Last prediction: </p>
@@ -34,7 +36,7 @@
 <script src="js/ndarray-browser-min.js"></script>
 <script src="js/onnx.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-latest.min.js" charset="utf-8"></script>
-<script src="js/demo.js"></script>
+<script src="js/posteriors.js"></script>
 </body>
 
 </html>

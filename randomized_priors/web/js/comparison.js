@@ -168,8 +168,8 @@ window.onload = function () {
             }
 
             tool.onMouseUp = () => {
-                inference(posteriorOnnxSession, identity, 0);
                 inference(mnistOnnxSession, softmax, 1);
+                inference(posteriorOnnxSession, identity, 0);
             }
 
             $('#clearBtn').click(() => {

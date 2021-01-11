@@ -34,7 +34,7 @@ class Lambda(nn.Module):
 
 
 class RandomizedPriorNetwork(nn.Module):
-    def __init__(self, prior_net, trainable_net, beta=1.0):
+    def __init__(self, prior_net, trainable_net, beta=3.0):
         super().__init__()
         self.prior_net = prior_net
         for param in self.prior_net.parameters():
@@ -69,7 +69,7 @@ class CombinedPosteriorNetwork(nn.Module):
         sm = [torch.softmax(n(x), dim=1) for n in self.networks]
         cat = torch.stack(sm, dim=2)
         res = torch.sum(cat, dim=2)
-        return res
+        return torch.div(res, len(self.networks))
 
 
 def loss_batch(model, loss_func, xb, yb, opt=None):
@@ -285,7 +285,7 @@ if __name__ == '__main__':
     test_loss = np.sum(losses) / np.sum(nums)
     print(f'Voting test accuracy (post-train): {test_loss * 100.0}% ({np.sum(losses)}/{np.sum(nums)})')
 
-    display_incorrect_classifications(classifiers, dev, test_loader, display_all=True, figure_limit=10)
+    # display_incorrect_classifications(classifiers, dev, test_loader, display_all=True, figure_limit=10)
 
     combined_classifier = CombinedPosteriorNetwork(classifiers)
     combined_classifier.to(dev)
