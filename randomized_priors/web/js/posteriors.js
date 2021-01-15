@@ -6,6 +6,7 @@ window.onload = function () {
     let minFileIndex = 0;
     let maxFileIndex = 11;
     let fileIndex = minFileIndex;
+    let folder = document.getElementById('25_epochs_radio').value;
 
     paper.setup('myCanvas');
     let path;
@@ -166,8 +167,8 @@ window.onload = function () {
         let tool = new paper.Tool();
         const posteriorOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
         const priorOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
-        posteriorOnnxSession.loadModel(`./models/classifier_${idx}_posterior.onnx`).then(() => {
-            priorOnnxSession.loadModel(`./models/classifier_${idx}_prior.onnx`).then(() => {
+        posteriorOnnxSession.loadModel(`./models/${folder}/classifier_${idx}_posterior.onnx`).then(() => {
+            priorOnnxSession.loadModel(`./models/${folder}/classifier_${idx}_prior.onnx`).then(() => {
                 tool.onMouseDown = function (event) {
                     path = new paper.Path();
                     path.strokeColor = 'white';
@@ -214,6 +215,14 @@ window.onload = function () {
     });
     $('#softmaxCheck').change(function() {
         selectedFn = $('#softmaxCheck').prop('checked') ? softmax : identity;
+        loadModels(fileIndex, true);
+    })
+    $('#2_epochs_radio').change(function() {
+        folder = document.getElementById('2_epochs_radio').value;
+        loadModels(fileIndex, true);
+    })
+    $('#25_epochs_radio').change(function() {
+        folder = document.getElementById('25_epochs_radio').value;
         loadModels(fileIndex, true);
     })
     loadModels(minFileIndex, false);

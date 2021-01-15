@@ -5,6 +5,7 @@ Array.prototype.count = function (val) {
 window.onload = function () {
     paper.setup('myCanvas');
     let path;
+    let folder = document.getElementById('25_epochs_radio').value;
     let c = document.getElementById("myCanvas");
     let ctx = c.getContext('2d');
 
@@ -160,7 +161,7 @@ window.onload = function () {
         let tool = new paper.Tool();
         const posteriorOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
         const mnistOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
-        posteriorOnnxSession.loadModel(`./models/combined_classifier.onnx`).then(() => {
+        posteriorOnnxSession.loadModel(`./models/${folder}/combined_classifier.onnx`).then(() => {
             mnistOnnxSession.loadModel(`./models/mnist-8.onnx`).then(() => {
                 tool.onMouseDown = function (event) {
                     path = new paper.Path();
@@ -193,5 +194,13 @@ window.onload = function () {
         data.forEach(d => {d.y = Array(10).fill(0);});
         Plotly.update('chart', data, layout);
     });
+    $('#2_epochs_radio').change(function() {
+        folder = document.getElementById('2_epochs_radio').value;
+        loadModels( true);
+    })
+    $('#25_epochs_radio').change(function() {
+        folder = document.getElementById('25_epochs_radio').value;
+        loadModels( true);
+    })
     loadModels( false);
 }

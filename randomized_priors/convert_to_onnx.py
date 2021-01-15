@@ -12,6 +12,7 @@ import torch.functional as F
 from adabelief_pytorch import AdaBelief
 import matplotlib
 from matplotlib import pyplot as plt
+import mnist_randomized_priors
 from mnist_randomized_priors import *
 plt.rcParams["figure.figsize"] = (8,6)
 
@@ -25,33 +26,18 @@ x.to(dev)
 print(f'Running on {dev}')
 saved_models = torch.load(PATH, map_location=dev)
 classifiers = nn.ModuleList()
+print(list(saved_models.keys()))
 for model_name in saved_models.keys():
     if not re.match(r'classifier_\d+', model_name):
         continue
 
-    trainable_model = nn.Sequential(
-        nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1),
-        nn.ReLU(),
-        nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1),
-        nn.ReLU(),
-        nn.AdaptiveAvgPool2d(1),
-        nn.Flatten()
-    )
+    trainable_model = TrainableNetwork()
     trainable_model.to(dev)
 
-    prior_model = nn.Sequential(
-        nn.Conv2d(1, 16, kernel_size=3),
-        nn.ReLU(),
-        nn.Conv2d(16, 10, kernel_size=3),
-        nn.ReLU(),
-        nn.AdaptiveAvgPool2d(1),
-        nn.Flatten()
-    )
+    prior_model = PriorNetwork()
     prior_model.to(dev)
 
-    cls = RandomizedPriorNetwork(prior_model, trainable_model, beta=3.0)
+    cls = RandomizedPriorNetwork(prior_model, trainable_model, beta=mnist_randomized_priors.BETA)
     cls.load_state_dict(saved_models[model_name])
     classifiers.append(cls)
 

@@ -13,16 +13,22 @@ import matplotlib
 from matplotlib import pyplot as plt
 plt.rcParams["figure.figsize"] = (8,6)
 
+# TODO save at specific checkpoints
+
 EPOCHS = 25
+CHECKPOINTS = [2, 25]
 VAL_PERCENTAGE = 25
-LEARNING_RATE = 0.01
-MOMENTUM = 0.9
+LEARNING_RATE = 1E-2
 BATCH_SIZE = 32
 BOOTSTRAP_PERCENTAGE = 90
 NUM_CLASSIFIERS = 12
+BETA = 10.0
 LOAD_MODEL = False
-PATH = "models/bootstrapped_random_priors_CNN_MNIST_beta_10.pt"
+BASE_PATH = "models/bootstrapped_random_priors_CNN_MNIST"
+SEED = 12345
 
+torch.manual_seed(SEED)
+np.random.seed(SEED)
 
 class Lambda(nn.Module):
     def __init__(self, func):
@@ -50,6 +56,32 @@ class RandomizedPriorNetwork(nn.Module):
                 self.beta))
 
 
+class PriorNetwork(nn.Sequential):
+    def __init__(self):
+        super(PriorNetwork, self).__init__()
+        self.add_module('conv1', nn.Conv2d(1, 16, kernel_size=3))
+        self.add_module('relu1', nn.ReLU())
+        self.add_module('conv2', nn.Conv2d(16, 10, kernel_size=3))
+        self.add_module('relu2', nn.ReLU())
+        self.add_module('avgpool1', nn.AdaptiveAvgPool2d(1))
+        self.add_module('flatten1', nn.Flatten())
+        # self.add_module('softmax1', nn.Softmax(dim=1))
+
+
+class TrainableNetwork(nn.Sequential):
+    def __init__(self):
+        super(TrainableNetwork, self).__init__()
+        self.add_module('conv1', nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1))
+        self.add_module('relu1', nn.ReLU())
+        self.add_module('conv2', nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1))
+        self.add_module('relu2', nn.ReLU())
+        self.add_module('conv3', nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1))
+        self.add_module('relu3', nn.ReLU())
+        self.add_module('avgpool1', nn.AdaptiveAvgPool2d(1))
+        self.add_module('flatten1', nn.Flatten())
+        # self.add_module('softmax1', nn.Softmax(dim=1))
+
+
 class VotingNetwork(nn.Module):
     def __init__(self, networks):
         super().__init__()
@@ -67,6 +99,7 @@ class CombinedPosteriorNetwork(nn.Module):
 
     def forward(self, x):
         sm = [torch.softmax(n(x), dim=1) for n in self.networks]
+        # sm = [n(x) for n in self.networks]
         cat = torch.stack(sm, dim=2)
         res = torch.sum(cat, dim=2)
         return torch.div(res, len(self.networks))
@@ -83,13 +116,13 @@ def loss_batch(model, loss_func, xb, yb, opt=None):
     return loss.item(), len(xb)
 
 
-def fit(epochs, model, device, loss_func, opt, train_dl, valid_dl):
-    for epoch in range(epochs):
+def fit(epochs, checkpoints, model, device, loss_func, opt, train_dl, valid_dl, name):
+    chks = {}
+    for epoch in range(1, epochs + 1):
         model.train()
         for xb, yb in train_dl:
             xb, yb = xb.to(device), yb.to(device)
             loss_batch(model, loss_func, xb, yb, opt)
-
         model.eval()
         with torch.no_grad():
             losses, nums = zip(
@@ -99,20 +132,25 @@ def fit(epochs, model, device, loss_func, opt, train_dl, valid_dl):
 
         print(epoch, val_loss)
 
+        if epoch in set(checkpoints):
+            chks[epoch] = copy.deepcopy(model.state_dict())
+    return chks
+
 
 def train_bootstrapped_random_prior_classifier(
         epochs,
+        checkpoints,
         prior_net,
         trainable_net,
         device,
         loss,
         train_dataset,
         val_dataset,
+        name,
         beta=1.0):
     model = RandomizedPriorNetwork(prior_net, trainable_net, beta=beta)
     model.to(device)
-    # opt = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM)
-    opt = AdaBelief(model.parameters(), lr=1e-3, eps=1e-8, betas=(0.9, 0.999), weight_decouple=True,
+    opt = AdaBelief(model.parameters(), lr=LEARNING_RATE, eps=1e-8, betas=(0.9, 0.999), weight_decouple=True,
                           rectify=False, print_change_log=False)
     train_subset = torch.utils.data.Subset(train_dataset,
                                            indices=np.random.choice(
@@ -125,8 +163,9 @@ def train_bootstrapped_random_prior_classifier(
                                                pin_memory=True)
     val_loader = torch.utils.data.DataLoader(val_dataset,
                                              batch_size=BATCH_SIZE, shuffle=True, pin_memory=True)
-    fit(epochs, model, device, loss, opt, train_loader, val_loader)
-    return model
+    chkpts = fit(epochs, checkpoints, model, device, loss, opt, train_loader, val_loader, name)
+    return model, chkpts
+
 
 def predict_bootstrapped_random_prior_classifier(models, batch):
     for m in models:
@@ -196,73 +235,46 @@ if __name__ == '__main__':
 
     classifiers = nn.ModuleList()
     if not LOAD_MODEL:
+        checkpts = []
         for i in range(NUM_CLASSIFIERS):
-            trainable_model = nn.Sequential(
-                nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1),
-                nn.ReLU(),
-                nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1),
-                nn.ReLU(),
-                nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1),
-                nn.ReLU(),
-                nn.AdaptiveAvgPool2d(1),
-                nn.Flatten()
-            )
-
-            prior_model = nn.Sequential(
-                nn.Conv2d(1, 16, kernel_size=3),
-                nn.ReLU(),
-                nn.Conv2d(16, 10, kernel_size=3),
-                nn.ReLU(),
-                nn.AdaptiveAvgPool2d(1),
-                nn.Flatten()
-            )
+            trainable_model = TrainableNetwork()
+            prior_model = PriorNetwork()
             for layer in prior_model:
                 if hasattr(layer, 'weight'):
                     torch.nn.init.xavier_normal_(layer.weight)
                 if hasattr(layer, 'bias'):
                     torch.nn.init.normal_(layer.bias)
 
-            cls = train_bootstrapped_random_prior_classifier(
+            cls, chks = train_bootstrapped_random_prior_classifier(
                 EPOCHS,
+                CHECKPOINTS,
                 prior_model,
                 trainable_model,
                 dev,
                 loss,
                 train_dataset,
-                val_dataset
+                val_dataset,
+                'classifier_{}'.format(i)
             )
             classifiers.append(cls)
+            checkpts.append(chks)
             print(f'Trained classifier {i}', flush=True)
         torch.save(
             {'classifier_{}'.format(i): cls.state_dict() for i, cls in enumerate(classifiers)},
-            PATH)
+            BASE_PATH + ".pt")
+        for ep in CHECKPOINTS:
+            torch.save(
+                {'classifier_{}'.format(i): chpt[ep] for i, chpt in enumerate(checkpts)},
+                BASE_PATH + f'_EPOCH_{ep}.pt')
     else:
-        saved_models = torch.load(PATH, map_location=dev)
+        saved_models = torch.load(BASE_PATH + ".pt", map_location=dev)
         for model_name in saved_models.keys():
-            if not re.match(r'classifier_\d+', model_name):
+            if not re.match(r'^classifier_\d+$', model_name, re.MULTILINE):
                 continue
 
-            trainable_model = nn.Sequential(
-                nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1),
-                nn.ReLU(),
-                nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1),
-                nn.ReLU(),
-                nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1),
-                nn.ReLU(),
-                nn.AdaptiveAvgPool2d(1),
-                nn.Flatten()
-            )
-
-            prior_model = nn.Sequential(
-                nn.Conv2d(1, 16, kernel_size=3),
-                nn.ReLU(),
-                nn.Conv2d(16, 10, kernel_size=3),
-                nn.ReLU(),
-                nn.AdaptiveAvgPool2d(1),
-                nn.Flatten()
-            )
-
-            cls = RandomizedPriorNetwork(prior_model, trainable_model, beta=10.0)
+            trainable_model = TrainableNetwork()
+            prior_model = PriorNetwork()
+            cls = RandomizedPriorNetwork(prior_model, trainable_model, beta=BETA)
             cls.load_state_dict(saved_models[model_name])
             cls.to(dev)
             classifiers.append(cls)
