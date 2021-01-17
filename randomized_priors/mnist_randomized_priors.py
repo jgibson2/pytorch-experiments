@@ -116,7 +116,7 @@ def loss_batch(model, loss_func, xb, yb, opt=None):
     return loss.item(), len(xb)
 
 
-def fit(epochs, checkpoints, model, device, loss_func, opt, train_dl, valid_dl, name):
+def fit(epochs, checkpoints, model, device, loss_func, opt, train_dl, valid_dl):
     chks = {}
     for epoch in range(1, epochs + 1):
         model.train()
@@ -146,7 +146,6 @@ def train_bootstrapped_random_prior_classifier(
         loss,
         train_dataset,
         val_dataset,
-        name,
         beta=1.0):
     model = RandomizedPriorNetwork(prior_net, trainable_net, beta=beta)
     model.to(device)
@@ -163,8 +162,33 @@ def train_bootstrapped_random_prior_classifier(
                                                pin_memory=True)
     val_loader = torch.utils.data.DataLoader(val_dataset,
                                              batch_size=BATCH_SIZE, shuffle=True, pin_memory=True)
-    chkpts = fit(epochs, checkpoints, model, device, loss, opt, train_loader, val_loader, name)
+    chkpts = fit(epochs, checkpoints, model, device, loss, opt, train_loader, val_loader)
     return model, chkpts
+
+def train_standard_classifier(
+        epochs,
+        checkpoints,
+        trainable_net,
+        device,
+        loss,
+        train_dataset,
+        val_dataset):
+    trainable_net.to(device)
+    opt = AdaBelief(trainable_net.parameters(), lr=LEARNING_RATE, eps=1e-8, betas=(0.9, 0.999), weight_decouple=True,
+                          rectify=False, print_change_log=False)
+    train_subset = torch.utils.data.Subset(train_dataset,
+                                           indices=np.random.choice(
+                                               np.arange(0, len(train_dataset)),
+                                               size=int(round(BOOTSTRAP_PERCENTAGE / 100.0 * len(train_dataset))),
+                                               replace=False))
+    train_loader = torch.utils.data.DataLoader(train_subset,
+                                               batch_size=BATCH_SIZE,
+                                               shuffle=True,
+                                               pin_memory=True)
+    val_loader = torch.utils.data.DataLoader(val_dataset,
+                                             batch_size=BATCH_SIZE, shuffle=True, pin_memory=True)
+    chkpts = fit(epochs, checkpoints, trainable_net, device, loss, opt, train_loader, val_loader)
+    return trainable_net, chkpts
 
 
 def predict_bootstrapped_random_prior_classifier(models, batch):
@@ -234,8 +258,19 @@ if __name__ == '__main__':
     train_dataset, val_dataset = train_val_set[0], train_val_set[1]
 
     classifiers = nn.ModuleList()
+    standard_cls, standard_checkpoints = None, []
     if not LOAD_MODEL:
         checkpts = []
+        standard_trainable_model = TrainableNetwork()
+        standard_cls, standard_checkpoints = train_standard_classifier(
+            EPOCHS,
+            CHECKPOINTS,
+            standard_trainable_model,
+            dev,
+            loss,
+            train_dataset,
+            val_dataset
+        )
         for i in range(NUM_CLASSIFIERS):
             trainable_model = TrainableNetwork()
             prior_model = PriorNetwork()
@@ -254,17 +289,21 @@ if __name__ == '__main__':
                 loss,
                 train_dataset,
                 val_dataset,
-                'classifier_{}'.format(i)
+                beta=BETA
             )
             classifiers.append(cls)
             checkpts.append(chks)
             print(f'Trained classifier {i}', flush=True)
+        states = {'classifier_{}'.format(i): cls.state_dict() for i, cls in enumerate(classifiers)}
+        states['standard_classifier'] = standard_cls.state_dict()
         torch.save(
-            {'classifier_{}'.format(i): cls.state_dict() for i, cls in enumerate(classifiers)},
+            states,
             BASE_PATH + ".pt")
         for ep in CHECKPOINTS:
+            ch_states = {'classifier_{}'.format(i): chpt[ep] for i, chpt in enumerate(checkpts)}
+            ch_states['standard_classifier'] = standard_checkpoints[ep]
             torch.save(
-                {'classifier_{}'.format(i): chpt[ep] for i, chpt in enumerate(checkpts)},
+                ch_states,
                 BASE_PATH + f'_EPOCH_{ep}.pt')
     else:
         saved_models = torch.load(BASE_PATH + ".pt", map_location=dev)
@@ -278,6 +317,9 @@ if __name__ == '__main__':
             cls.load_state_dict(saved_models[model_name])
             cls.to(dev)
             classifiers.append(cls)
+        standard_cls = TrainableNetwork()
+        standard_cls.load_state_dict(saved_models['standard_classifier'])
+        standard_cls.to(dev)
 
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                               batch_size=BATCH_SIZE, shuffle=True, pin_memory=True)
@@ -287,6 +329,15 @@ if __name__ == '__main__':
             Lambda(lambda x: torch.mode(x, dim=1).values)
         )
     voting_classifier.to(dev)
+
+    with torch.no_grad():
+        losses, nums = zip(
+            *[(torch.sum(
+               torch.eq(torch.argmax(standard_cls(xb.to(dev))).cpu(), yb).long()),
+               yb.size(0)) for xb, yb in test_loader]
+        )
+    test_loss = np.sum(losses) / np.sum(nums)
+    print(f'Standard classifier accuracy (post-train): {test_loss * 100.0}% ({np.sum(losses)}/{np.sum(nums)})')
 
     with torch.no_grad():
         losses, nums = zip(
