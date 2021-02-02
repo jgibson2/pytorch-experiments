@@ -162,7 +162,7 @@ window.onload = function () {
         const posteriorOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
         const mnistOnnxSession = new onnx.InferenceSession({backendHint: "cpu"});
         posteriorOnnxSession.loadModel(`./models/${folder}/combined_classifier.onnx`).then(() => {
-            mnistOnnxSession.loadModel(`./models/mnist-8.onnx`).then(() => {
+            mnistOnnxSession.loadModel(`./models/standard_classifier.onnx`).then(() => {
                 tool.onMouseDown = function (event) {
                     path = new paper.Path();
                     path.strokeColor = 'white';
@@ -177,7 +177,7 @@ window.onload = function () {
                 }
 
                 tool.onMouseUp = () => {
-                    inference(mnistOnnxSession, softmax, 0);
+                    inference(mnistOnnxSession, identity, 0);
                     inference(posteriorOnnxSession, identity, 1);
                 }
 

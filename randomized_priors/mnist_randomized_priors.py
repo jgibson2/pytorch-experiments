@@ -257,6 +257,9 @@ if __name__ == '__main__':
         ])
     train_dataset, val_dataset = train_val_set[0], train_val_set[1]
 
+    test_loader = torch.utils.data.DataLoader(test_dataset,
+                                              batch_size=BATCH_SIZE, shuffle=True, pin_memory=True)
+
     classifiers = nn.ModuleList()
     standard_cls, standard_checkpoints = None, []
     if not LOAD_MODEL:
@@ -333,7 +336,7 @@ if __name__ == '__main__':
     with torch.no_grad():
         losses, nums = zip(
             *[(torch.sum(
-               torch.eq(torch.argmax(standard_cls(xb.to(dev))).cpu(), yb).long()),
+                torch.eq(torch.argmax(standard_cls(xb.to(dev)), dim=1).cpu(), yb).long()),
                yb.size(0)) for xb, yb in test_loader]
         )
     test_loss = np.sum(losses) / np.sum(nums)
