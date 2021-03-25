@@ -1,0 +1,6 @@
+[submodule "birds_classifier/yolov5"]
+	path = birds_classifier/yolov5
+	url = https://github.com/ultralytics/yolov5.git
+[submodule "birds_classifier/pytorch-ssd"]
+	path = birds_classifier/pytorch-ssd
+	url = https://github.com/qfgaohao/pytorch-ssd.git
