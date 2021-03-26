@@ -7,6 +7,10 @@ window.onload = function () {
     let path;
     let c = document.getElementById("myCanvas");
     let ctx = c.getContext('2d');
+    let predIds = new Map();
+    predIds.set(0, '#lastPredStandardClassifier')
+    predIds.set(1, '#lastPredRandomizedPriors')
+    predIds.set(2, '#lastPredSWAG')
 
     let layout = {
         autosize: false,
@@ -143,7 +147,7 @@ window.onload = function () {
             console.log(`model output tensor: ${outputTensor}.`);
             data[idx].y = fn(outputTensor);
             console.log(`final output: ${data[idx].y}.`)
-            $('#lastPred').text(`Last prediction: ${data[idx].y.indexOf(Math.max(...data[idx].y))}`);
+            $(predIds.get(idx)).text(`${data[idx].y.indexOf(Math.max(...data[idx].y))}`);
             Plotly.update('chart', data, layout);
         }).catch(err => {
             console.log(err);
