@@ -15,15 +15,15 @@ plt.rcParams["figure.figsize"] = (8,6)
 
 # TODO save at specific checkpoints
 
-EPOCHS = 25
-CHECKPOINTS = [2, 25]
+EPOCHS = 100
+CHECKPOINTS = [2, 25, 50, 75, 100]
 VAL_PERCENTAGE = 25
 LEARNING_RATE = 1E-2
 BATCH_SIZE = 32
 BOOTSTRAP_PERCENTAGE = 90
 NUM_CLASSIFIERS = 12
 BETA = 10.0
-LOAD_MODEL = False
+LOAD_MODEL = True
 BASE_PATH = "models/bootstrapped_random_priors_CNN_MNIST"
 SEED = 12345
 
@@ -98,8 +98,8 @@ class CombinedPosteriorNetwork(nn.Module):
         self.networks = networks
 
     def forward(self, x):
-        sm = [torch.softmax(n(x), dim=1) for n in self.networks]
-        # sm = [n(x) for n in self.networks]
+        # sm = [torch.softmax(n(x), dim=1) for n in self.networks]
+        sm = [n(x) for n in self.networks]
         cat = torch.stack(sm, dim=2)
         res = torch.sum(cat, dim=2)
         return torch.div(res, len(self.networks))
@@ -116,8 +116,11 @@ def loss_batch(model, loss_func, xb, yb, opt=None):
     return loss.item(), len(xb)
 
 
-def fit(epochs, checkpoints, model, device, loss_func, opt, train_dl, valid_dl):
+def fit(epochs, checkpoints, model, device, loss_func, opt, train_dl, valid_dl, burnin=10, patience=5):
     chks = {}
+    val_min = np.inf
+    its_no_improvement = 0
+    best_params = None
     for epoch in range(1, epochs + 1):
         model.train()
         for xb, yb in train_dl:
@@ -130,10 +133,21 @@ def fit(epochs, checkpoints, model, device, loss_func, opt, train_dl, valid_dl):
             )
         val_loss = np.sum(np.multiply(losses, nums)) / np.sum(nums)
 
-        print(epoch, val_loss)
+        print(f'\t\tEpoch: {epoch} Validation loss: {val_loss.item()}')
+        if val_loss < val_min or val_min == np.inf:
+            its_no_improvement = 0
+            if val_loss.item() < val_min:
+                val_min = val_loss.item()
+                best_params = copy.deepcopy(model.state_dict())
+        elif epoch >= burnin:
+            its_no_improvement += 1
+            if its_no_improvement > patience:
+                print(f'Stopped after {epoch} epochs')
+                break
 
         if epoch in set(checkpoints):
             chks[epoch] = copy.deepcopy(model.state_dict())
+    model.load_state_dict(best_params)
     return chks
 
 
@@ -303,7 +317,7 @@ if __name__ == '__main__':
             states,
             BASE_PATH + ".pt")
         for ep in CHECKPOINTS:
-            ch_states = {'classifier_{}'.format(i): chpt[ep] for i, chpt in enumerate(checkpts)}
+            ch_states = {'classifier_{}'.format(i): chpt[ep] for i, chpt in enumerate(checkpts) if ep in chpt}
             ch_states['standard_classifier'] = standard_checkpoints[ep]
             torch.save(
                 ch_states,

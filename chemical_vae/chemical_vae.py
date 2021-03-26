@@ -244,7 +244,7 @@ def train_vae(train_dataloader, val_dataloader, model,
 
 def main():
     dev = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    dataset = SMILESDataset('data/1K_ZINC.txt')
+    dataset = SMILESDataset('data/250K_ZINC.txt')
     print('Max SELFIES Length: {}'.format(dataset.max_selfies_length))
     print('Feature Vector Length: {}'.format(dataset.feature_vector_length))
     train_val_set = torch.utils.data.random_split(
