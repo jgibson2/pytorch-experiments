@@ -18,13 +18,12 @@ plt.rcParams["figure.figsize"] = (8,6)
 TRAIN_EPOCHS = 100
 VAL_PERCENTAGE = 25
 LEARNING_RATE = 1E-2
-SWA_LEARNING_RATE = 1E-2
+SWA_LEARNING_RATE = 1e-1
 SWA_TRAIN_EPOCHS = 25
-SWA_TEST_DRAWS = 12
+SWA_TEST_DRAWS = 20
 SWA_K = 10
-BATCH_SIZE = 1024
+BATCH_SIZE = 32
 BOOTSTRAP_PERCENTAGE = 0.9
-NUM_CLASSIFIERS = 12
 LOAD_MODEL = True
 BASE_PATH = "models/mnist_swa_gaussian"
 SEED = 12345
@@ -66,8 +65,9 @@ class CombinedPosteriorNetwork(nn.Module):
         # sm = [torch.softmax(n(x), dim=1) for n in self.networks]
         sm = [n(x) for n in self.networks]
         cat = torch.stack(sm, dim=2)
-        res = torch.sum(cat, dim=2)
-        return torch.div(res, len(self.networks))
+        mean = torch.mean(cat, dim=2)
+        std = torch.std(cat, dim=2, unbiased=False)
+        return mean, std
 
 
 def loss_batch(model, loss_func, xb, yb, opt=None):
@@ -140,7 +140,8 @@ def train_swa_gaussian_parameters(
         trainable_net,
         device,
         loss,
-        train_dataset
+        train_dataset,
+        max_delta_ratio=10.0
 ):
     opt = optim.SGD(trainable_net.parameters(), lr=SWA_LEARNING_RATE)
     train_subset = torch.utils.data.Subset(train_dataset,
@@ -162,7 +163,10 @@ def train_swa_gaussian_parameters(
             ls = loss(trainable_net(xb), yb)
             ls.backward()
             opt.step()
-        weights.append(np.hstack([l.weight.detach().cpu().numpy().ravel() for l in trainable_net if hasattr(l, 'weight')]))
+        new_weights = np.hstack([l.weight.detach().cpu().numpy().ravel() for l in trainable_net if hasattr(l, 'weight')])
+        new_weights = np.minimum(new_weights, np.maximum(weights[-1] * (1.0 + max_delta_ratio), 0))
+        new_weights = np.maximum(new_weights, np.minimum(weights[-1] * (1.0 + max_delta_ratio), 0))
+        weights.append(new_weights)
     weights = np.vstack(weights)
     mean_weights = np.mean(weights, axis=0)
     sigma_diag_weights = np.maximum(np.mean(np.square(weights), axis=0) - np.square(mean_weights), 0)
@@ -314,15 +318,18 @@ if __name__ == '__main__':
     test_loss = np.sum(losses) / np.sum(nums)
     print(f'Standard classifier accuracy (post-train): {test_loss * 100.0}% ({np.sum(losses)}/{np.sum(nums)})')
 
-    mw, sw, D = train_swa_gaussian_parameters(SWA_TRAIN_EPOCHS, standard_cls, dev, loss, train_dataset)
-    models = [build_swa_gaussian_classifier(standard_cls, dev, train_dataset, mw, sw, D) for _ in range(SWA_TEST_DRAWS)]
+    new_cls = TrainableNetwork()
+    new_cls.load_state_dict(copy.deepcopy(standard_cls.state_dict()))
+    new_cls.to(dev)
+    mw, sw, D = train_swa_gaussian_parameters(SWA_TRAIN_EPOCHS, new_cls, dev, loss, train_dataset)
+    models = [build_swa_gaussian_classifier(new_cls, dev, train_dataset, mw, sw, D) for _ in range(SWA_TEST_DRAWS)]
     combined_model = CombinedPosteriorNetwork(models)
     combined_model.to(dev)
 
     with torch.no_grad():
         losses, nums = zip(
             *[(torch.sum(
-                torch.eq(torch.argmax(combined_model(xb.to(dev)).cpu(), dim=1), yb).long()),
+                torch.eq(torch.argmax(combined_model(xb.to(dev))[0].cpu(), dim=1), yb).long()),
                yb.size(0)) for xb, yb in test_loader]
         )
     test_loss = np.sum(losses) / np.sum(nums)

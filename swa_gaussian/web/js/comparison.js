@@ -24,7 +24,7 @@ window.onload = function () {
             pad: 4
         },
         yaxis: {
-            title: 'Confidence',
+            title: 'Prediction Output',
             range: [0, 1]
         },
         xaxis: {
@@ -43,18 +43,27 @@ window.onload = function () {
         {
             x: [...Array(10).keys()],
             y: Array(10).fill(0),
+            error_y: {
+                type: 'data', array: Array(10).fill(0), visible: false
+            },
             type: 'bar',
             name: 'Standard Network'
         },
         {
             x: [...Array(10).keys()],
             y: Array(10).fill(0),
+            error_y: {
+                type: 'data', array: Array(10).fill(0), visible: false
+            },
             type: 'bar',
             name: 'Randomized Priors'
         },
         {
             x: [...Array(10).keys()],
             y: Array(10).fill(0),
+            error_y: {
+                type: 'data', array: Array(10).fill(0), visible: false
+            },
             type: 'bar',
             name: 'SWA-Gaussian'
         }
@@ -72,7 +81,7 @@ window.onload = function () {
         return new onnx.Tensor(dataProcessed.data, 'float32', [1, 1, width, height]);
     }
 
-    let inference = (sess, fn, idx) => {
+    let inference = (sess, fn, idx, conf) => {
         let crop = document.createElement('canvas');
         let cropCtx = crop.getContext('2d');
         let drawnImageData = ctx.getImageData( 0, 0, ctx.canvas.width, ctx.canvas.height );
@@ -143,10 +152,18 @@ window.onload = function () {
         );
         sess.run([inferenceInput]).then((output) => {
             // consume the output
-            const outputTensor = Array.from(output.values().next().value.data);
-            console.log(`model output tensor: ${outputTensor}.`);
+            console.log(output);
+            console.log(Object.keys(output));
+            let outputName = conf ? "output_mean" : "output";
+            const outputTensor = Array.from(output.get(outputName).data);
+            // console.log(`model output tensor: ${outputTensor}.`);
             data[idx].y = fn(outputTensor);
-            console.log(`final output: ${data[idx].y}.`)
+            if(conf) {
+                const confTensor = Array.from(output.get("output_std").data);
+                data[idx].error_y.array = fn(confTensor);
+                 data[idx].error_y.visible = true;
+            }
+            // console.log(`final output: ${data[idx].y}.`)
             $(predIds.get(idx)).text(`${data[idx].y.indexOf(Math.max(...data[idx].y))}`);
             Plotly.update('chart', data, layout);
         }).catch(err => {
@@ -162,6 +179,11 @@ window.onload = function () {
     let scale = (o) => {
         let smSum = o.reduce((a,e) => a + e, 0.0);
         return o.map(e => e / smSum);
+    }
+
+    let scale_max = (o) => {
+        let smMax = o.reduce((a,e) => Math.max(a, e), 1e-8);
+        return o.map(e => e / smMax);
     }
 
     let identity = (o) => {return o;}
@@ -188,9 +210,9 @@ window.onload = function () {
                     }
 
                     tool.onMouseUp = () => {
-                        inference(standardOnnxSession, scale, 0);
-                        inference(randomizedPriorsOnnxSession, scale, 1);
-                        inference(swagOnnxSession, scale, 2);
+                        inference(standardOnnxSession, scale, 0, false);
+                        inference(randomizedPriorsOnnxSession, scale, 1, true);
+                        inference(swagOnnxSession, scale, 2, true);
                     }
 
                     if (doInference) {
@@ -205,6 +227,7 @@ window.onload = function () {
         paper.project.activeLayer.removeChildren();
         paper.view.draw();
         data.forEach(d => {d.y = Array(10).fill(0);});
+        data.forEach(d => {d.error_y.visible = false});
         Plotly.update('chart', data, layout);
     });
 

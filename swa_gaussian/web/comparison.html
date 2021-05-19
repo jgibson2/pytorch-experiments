@@ -41,6 +41,23 @@
             </div>
         </div>
     </div>
+	<div class="row">
+		<p> This project is a comparison of different methods used to generate an approximation to the predictive posterior
+		distribution of a neural networks. A standard, basic classifier was trained on MNIST data and achieved an
+		accuracy of 95.8%. The structure of the network is visible
+		<a href=https://netron.app?url=https://jgibson2.github.io/posterior_comparison/models/standard_classifier.onnx>here</a>.
+		Then, techniques from the papers <a href=https://arxiv.org/abs/1902.02476>A Simple Baseline for Bayesian Uncertainty in Deep Learning</a>
+		(e.g. SWA-Gaussian) and <a href=https://arxiv.org/abs/1806.03335>Randomized Prior Functions for Deep Reinforcement Learning</a> were implemented
+		in PyTorch and exported to ONNX by drawing 20 networks from the "posterior" and taking the average over the outputs. The implementations are available
+		<a href=https://github.com/jgibson2/pytorch-experiments>here</a>, and the network structures are explorable for
+		<a href=https://netron.app?url=https://jgibson2.github.io/posterior_comparison/models/combined_classifier_randomized_priors.onnx>Randomized Priors</a>
+		and <a href=https://netron.app?url=https://jgibson2.github.io/posterior_comparison/models/combined_classifier_swa_gaussian.onnx>SWA-Gaussian</a>
+		using Netron. On the SWA-Gaussian and Randomized Priors outputs, error bars are added which correspond to the standard deviation
+        of the prediction outputs from the 20 models that make up the classifier. This allows us to see how confident the networks are
+        in their predictions.
+        To use the demo, use your mouse to draw a digit in the box and see how the different techniques behave, especially when given digits
+		that are not clearly of one class. </p>
+	</div>
 </div>
 <script src="js/jquery-3.5.1.min.js"></script>
 <script src="js/paper-core.js"></script>

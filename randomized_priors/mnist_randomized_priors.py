@@ -21,8 +21,8 @@ VAL_PERCENTAGE = 25
 LEARNING_RATE = 1E-2
 BATCH_SIZE = 32
 BOOTSTRAP_PERCENTAGE = 90
-NUM_CLASSIFIERS = 12
-BETA = 10.0
+NUM_CLASSIFIERS = 20
+BETA = 2.0
 LOAD_MODEL = True
 BASE_PATH = "models/bootstrapped_random_priors_CNN_MNIST"
 SEED = 12345
@@ -101,8 +101,9 @@ class CombinedPosteriorNetwork(nn.Module):
         # sm = [torch.softmax(n(x), dim=1) for n in self.networks]
         sm = [n(x) for n in self.networks]
         cat = torch.stack(sm, dim=2)
-        res = torch.sum(cat, dim=2)
-        return torch.div(res, len(self.networks))
+        mean = torch.mean(cat, dim=2)
+        std = torch.std(cat, dim=2, unbiased=False)
+        return mean, std
 
 
 def loss_batch(model, loss_func, xb, yb, opt=None):
@@ -318,7 +319,8 @@ if __name__ == '__main__':
             BASE_PATH + ".pt")
         for ep in CHECKPOINTS:
             ch_states = {'classifier_{}'.format(i): chpt[ep] for i, chpt in enumerate(checkpts) if ep in chpt}
-            ch_states['standard_classifier'] = standard_checkpoints[ep]
+            if ep in standard_checkpoints:
+                ch_states['standard_classifier'] = standard_checkpoints[ep]
             torch.save(
                 ch_states,
                 BASE_PATH + f'_EPOCH_{ep}.pt')
@@ -373,7 +375,7 @@ if __name__ == '__main__':
     with torch.no_grad():
         losses, nums = zip(
             *[(torch.sum(
-                torch.eq(torch.argmax(combined_classifier(xb.to(dev)).cpu(), dim=1), yb).long()),
+                torch.eq(torch.argmax(combined_classifier(xb.to(dev))[0].cpu(), dim=1), yb).long()),
                yb.size(0)) for xb, yb in test_loader]
         )
     test_loss = np.sum(losses) / np.sum(nums)

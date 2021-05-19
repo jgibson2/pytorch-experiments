@@ -41,59 +41,42 @@ for model_name in saved_models.keys():
     cls.load_state_dict(saved_models[model_name])
     classifiers.append(cls)
 
-    # Export the prior and posterior
-    torch.onnx.export(cls.prior_net,               # model being run
-                      x.to(dev),  # model input (or a tuple for multiple inputs)
-                      "models/onnx/" + model_name + "_prior.onnx",   # where to save the model (can be a file or file-like object)
-                      export_params=True,        # store the trained parameter weights inside the model file
-                      opset_version=10,          # the ONNX version to export the model to
-                      do_constant_folding=True,  # whether to execute constant folding for optimization
-                      input_names = ['input'],   # the model's input names
-                      output_names = ['output'], # the model's output names
-                      dynamic_axes={'input' : {0 : 'batch_size'},    # variable lenght axes
-                                    'output' : {0 : 'batch_size'}})
-
-    torch.onnx.export(cls,  # model being run
-                      x.to(dev),  # model input (or a tuple for multiple inputs)
-                      "models/onnx/" + model_name + "_posterior.onnx",
-                      # where to save the model (can be a file or file-like object)
-                      export_params=True,  # store the trained parameter weights inside the model file
-                      opset_version=10,  # the ONNX version to export the model to
-                      do_constant_folding=True,  # whether to execute constant folding for optimization
-                      input_names=['input'],  # the model's input names
-                      output_names=['output'],  # the model's output names
-                      dynamic_axes={'input': {0: 'batch_size'},  # variable lenght axes
-                                    'output': {0: 'batch_size'}})
+    # # Export the prior and posterior
+    # torch.onnx.export(cls.prior_net,               # model being run
+    #                   x.to(dev),  # model input (or a tuple for multiple inputs)
+    #                   "models/onnx/" + model_name + "_prior.onnx",   # where to save the model (can be a file or file-like object)
+    #                   export_params=True,        # store the trained parameter weights inside the model file
+    #                   opset_version=10,          # the ONNX version to export the model to
+    #                   do_constant_folding=True,  # whether to execute constant folding for optimization
+    #                   input_names = ['input'],   # the model's input names
+    #                   output_names = ['output'], # the model's output names
+    #                   dynamic_axes={'input' : {0 : 'batch_size'},    # variable lenght axes
+    #                                 'output' : {0 : 'batch_size'}})
+    #
+    # torch.onnx.export(cls,  # model being run
+    #                   x.to(dev),  # model input (or a tuple for multiple inputs)
+    #                   "models/onnx/" + model_name + "_posterior.onnx",
+    #                   # where to save the model (can be a file or file-like object)
+    #                   export_params=True,  # store the trained parameter weights inside the model file
+    #                   opset_version=10,  # the ONNX version to export the model to
+    #                   do_constant_folding=True,  # whether to execute constant folding for optimization
+    #                   input_names=['input'],  # the model's input names
+    #                   output_names=['output'],  # the model's output names
+    #                   dynamic_axes={'input': {0: 'batch_size'},  # variable lenght axes
+    #                                 'output': {0: 'batch_size'}})
 
 classifiers.to(dev)
 combined_model = CombinedPosteriorNetwork(classifiers)
 combined_model.to(dev)
 
-# Export the prior
 torch.onnx.export(combined_model,               # model being run
                   x.to(dev),                         # model input (or a tuple for multiple inputs)
-                  "models/onnx/combined_classifier.onnx",   # where to save the model (can be a file or file-like object)
+                  "models/onnx/combined_classifier_randomized_priors.onnx",   # where to save the model (can be a file or file-like object)
                   export_params=True,        # store the trained parameter weights inside the model file
-                  opset_version=11,          # the ONNX version to export the model to
+                  opset_version=7,          # the ONNX version to export the model to
                   do_constant_folding=True,  # whether to execute constant folding for optimization
                   input_names = ['input'],   # the model's input names
-                  output_names = ['output'], # the model's output names
-                  dynamic_axes={'input' : {0 : 'batch_size'},    # variable lenght axes
-                                'output' : {0 : 'batch_size'}})
-
-
-voting_model = VotingNetwork(classifiers)
-voting_model.to(dev)
-
-# Export the prior
-torch.onnx.export(voting_model,               # model being run
-                  x.to(dev),                         # model input (or a tuple for multiple inputs)
-                  "models/onnx/voting_classifier.onnx",   # where to save the model (can be a file or file-like object)
-                  export_params=True,        # store the trained parameter weights inside the model file
-                  opset_version=11,          # the ONNX version to export the model to
-                  do_constant_folding=True,  # whether to execute constant folding for optimization
-                  input_names = ['input'],   # the model's input names
-                  output_names = ['output'], # the model's output names
+                  output_names = ['output_mean', 'output_std'], # the model's output names
                   dynamic_axes={'input' : {0 : 'batch_size'},    # variable lenght axes
                                 'output' : {0 : 'batch_size'}})
 
@@ -101,12 +84,11 @@ torch.onnx.export(voting_model,               # model being run
 standard_model = TrainableNetwork()
 standard_model.load_state_dict(saved_models['standard_classifier'])
 standard_model.to(dev)
-standard_model = torch.nn.Sequential(standard_model, torch.nn.Softmax(dim=1))
 torch.onnx.export(standard_model,               # model being run
                   x.to(dev),                         # model input (or a tuple for multiple inputs)
                   "models/onnx/standard_classifier.onnx",   # where to save the model (can be a file or file-like object)
                   export_params=True,        # store the trained parameter weights inside the model file
-                  opset_version=11,          # the ONNX version to export the model to
+                  opset_version=7,          # the ONNX version to export the model to
                   do_constant_folding=True,  # whether to execute constant folding for optimization
                   input_names = ['input'],   # the model's input names
                   output_names = ['output'], # the model's output names

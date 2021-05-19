@@ -4,3 +4,6 @@
 [submodule "birds_classifier/pytorch-ssd"]
 	path = birds_classifier/pytorch-ssd
 	url = https://github.com/qfgaohao/pytorch-ssd.git
+[submodule "stylegan2-ada-pytorch"]
+	path = stylegan2-ada-pytorch
+	url = https://github.com/jgibson2/stylegan2-ada-pytorch.git
