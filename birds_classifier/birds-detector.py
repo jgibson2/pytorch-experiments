@@ -4,21 +4,24 @@ import cv2
 import depthai
 import numpy as np
 
-THRESHOLD = 0.75
-MAX_BOXES = 3
+THRESHOLD = 0.5
+MAX_BOXES = 1
 
 # Pipeline tells DepthAI what operations to perform when running - you define all of the resources used and flows here
 pipeline = depthai.Pipeline()
+pipeline.setOpenVINOVersion(depthai.OpenVINO.VERSION_2021_4)
 
 # First, we want the Color camera as the output
 cam_rgb = pipeline.createColorCamera()
 cam_rgb.setPreviewSize(300, 300)  # 300x300 will be the preview frame size, available as 'preview' output of the node
 cam_rgb.setInterleaved(False)
+cam_rgb.setColorOrder(depthai.ColorCameraProperties.ColorOrder.BGR)
 
 # Next, we want a neural network that will produce the detections
 detection_nn = pipeline.createNeuralNetwork()
 # Blob is the Neural Network file, compiled for MyriadX. It contains both the definition and weights of the model
-detection_nn.setBlobPath(str((Path(__file__).parent / Path('pytorch-ssd/models/mb2-ssd-lite.blob')).resolve().absolute()))
+detection_nn.setBlobPath(
+    str((Path(__file__).parent / Path('models/mb2-ssd-lite-2021-4.blob')).resolve().absolute()))
 # Next, we link the camera 'preview' output to the neural network detection input, so that it can produce detections
 cam_rgb.preview.link(detection_nn.input)
 
@@ -35,9 +38,9 @@ xout_nn.setStreamName("nn")
 detection_nn.out.link(xout_nn.input)
 
 # Pipeline is now finished, and we need to find an available device to run our pipeline
-device = depthai.Device(pipeline)
+device = depthai.Device()
 # And start. From this point, the Device will be in "running" mode and will start sending data via XLink
-device.startPipeline()
+device.startPipeline(pipeline)
 
 # To consume the device results, we get two output queues from the device, with stream names we assigned earlier
 q_rgb = device.getOutputQueue("rgb")
@@ -74,16 +77,11 @@ while True:
         bboxes = np.array(in_nn.getLayerFp16('boxes')).reshape(3000, 4)
         scores = np.array(in_nn.getLayerFp16('scores')).reshape(3000, 2)
         bird_box_indices = np.where(np.logical_and(scores[:, 1] > THRESHOLD, scores[:, 1] > scores[:, 0]))[0]
-        # bird_box_indices = np.where(scores[:, 1] > THRESHOLD)[0]
         if bird_box_indices.shape[0] > 0:
             bird_box_indices = bird_box_indices[np.argsort(scores[bird_box_indices, 1][-MAX_BOXES:])]
             bird_boxes = bboxes[bird_box_indices, :]
-            counter = 0
-            # print('Got birds!')
         else:
-            counter += 1
-            if counter > 10:
-                bird_boxes = []
+            bird_boxes = ()
 
     if frame is not None:
         for raw_bbox in bird_boxes:

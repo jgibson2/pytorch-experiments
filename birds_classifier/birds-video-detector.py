@@ -7,15 +7,14 @@ import depthai as dai
 import numpy as np
 import sys
 
-INITIAL_THRESHOLD = 0.80
-TRACKING_THRESHOLD = 0.70
+INITIAL_THRESHOLD = 0.4
 MAX_BOXES = 1
-HYSTERESIS = 3
 
 videoPath = str(Path(sys.argv[1]).resolve().absolute())
 
 # Pipeline tells DepthAI what operations to perform when running - you define all of the resources used and flows here
 pipeline = dai.Pipeline()
+pipeline.setOpenVINOVersion(dai.OpenVINO.VERSION_2021_4)
 
 # Create xLink input to which host will send frames from the video file
 xinFrame = pipeline.createXLinkIn()
@@ -25,7 +24,7 @@ xinFrame.setStreamName("inFrame")
 detection_nn = pipeline.createNeuralNetwork()
 # Blob is the Neural Network file, compiled for MyriadX. It contains both the definition and weights of the model
 detection_nn.setBlobPath(
-    str((Path(__file__).parent / Path('pytorch-ssd/models/mb2-ssd-lite.blob')).resolve().absolute()))
+    str((Path(__file__).parent / Path('models/mb2-ssd-lite-2021-4.blob')).resolve().absolute()))
 # Next, we link the camera 'preview' output to the neural network detection input, so that it can produce detections
 xinFrame.out.link(detection_nn.input)
 
@@ -38,7 +37,6 @@ detection_nn.out.link(xout_nn.input)
 frame = None
 bboxes = []
 bird_boxes = []
-counter = HYSTERESIS + 1
 
 
 # Since the bboxes returned by nn have values from <0..1> range, they need to be multiplied by frame width/height to
@@ -52,9 +50,9 @@ def to_planar(arr: np.ndarray, shape: tuple) -> np.ndarray:
 
 
 # Main host-side application loop
-with dai.Device(pipeline) as device:
+with dai.Device() as device:
     # Start pipeline
-    device.startPipeline()
+    device.startPipeline(pipeline)
 
     q_in = device.getInputQueue("inFrame")
     # To consume the device results, we get two output queues from the device, with stream names we assigned earlier
@@ -82,18 +80,13 @@ with dai.Device(pipeline) as device:
             # when data from nn is received, it is also represented as a 1D array initially, just like rgb frame
             bboxes = np.array(out_nn.getLayerFp16('boxes')).reshape(3000, 4)
             scores = np.array(out_nn.getLayerFp16('scores')).reshape(3000, 2)
-            thresh = INITIAL_THRESHOLD if counter > HYSTERESIS else TRACKING_THRESHOLD
+            thresh = INITIAL_THRESHOLD
             bird_box_indices = np.where(np.logical_and(scores[:, 1] > thresh, scores[:, 1] > scores[:, 0]))[0]
-            # bird_box_indices = np.where(scores[:, 1] > THRESHOLD)[0]
             if bird_box_indices.shape[0] > 0:
                 bird_box_indices = bird_box_indices[np.argsort(scores[bird_box_indices, 1][-MAX_BOXES:])]
                 bird_boxes = bboxes[bird_box_indices, :]
-                counter = 0
-                # print('Got birds!')
             else:
-                counter += 1
-                if counter > HYSTERESIS:
-                    bird_boxes = []
+                bird_boxes = []
 
         if frame is not None:
             for raw_bbox in bird_boxes:
