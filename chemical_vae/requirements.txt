@@ -2,7 +2,7 @@ torch
 torchvision
 numpy
 matplotlib
-adabelief-pytorch==0.2.0
+adabelief-pytorch
 rdkit
 selfies
-
+transformers

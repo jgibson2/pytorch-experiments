@@ -4,7 +4,6 @@ import sys
 import time
 
 import torch
-import torchvision
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data
@@ -42,16 +41,15 @@ class SMILESDataset(torch.utils.data.IterableDataset):
 
     def __iter__(self):
         return iter(map(lambda s: torch.Tensor(sf.selfies_to_encoding(s,
-                                                                                    vocab_stoi=self.symbol_to_idx,
-                                                                                    pad_to_len=self.max_selfies_length,
-                                                                                    enc_type='one_hot')),
-                        self.selfies))
+                                                                      vocab_stoi=self.symbol_to_idx,
+                                                                      pad_to_len=self.max_selfies_length,
+                                                                      enc_type='one_hot')), self.selfies))
 
     def __getitem__(self, idx):
         return torch.Tensor(sf.selfies_to_encoding(self.selfies[idx],
-                                                                 vocab_stoi=self.symbol_to_idx,
-                                                                 pad_to_len=self.max_selfies_length,
-                                                                 enc_type='one_hot'))
+                                                   vocab_stoi=self.symbol_to_idx,
+                                                   pad_to_len=self.max_selfies_length,
+                                                   enc_type='one_hot'))
 
     def __len__(self):
         return len(self.selfies)
@@ -106,7 +104,7 @@ class LargeFeatureDecoder(torch.nn.Module):
 
     def forward(self, z, hidden):
         """
-        A forward pass throught the entire model.
+        A forward pass through the entire model.
         """
 
         # Decode
@@ -159,7 +157,7 @@ class LargeFeatureVAE(torch.nn.Module):
     def calculate_loss(self, out, mu, logvar, inputs):
         target = torch.argmax(inputs, dim=2)
         # TODO: Fix loss (reshape, get labels)
-        recon_loss = F.cross_entropy(out.reshape(inputs.size()).transpose(1,2), target)
+        recon_loss = F.cross_entropy(out.reshape(inputs.size()).transpose(1, 2), target)
         kl_loss = torch.mean(-0.5 * torch.sum(1 + logvar - mu ** 2 - logvar.exp(), dim=1), dim=0)
         loss = recon_loss + (KL_WEIGHT * kl_loss)
         return loss
@@ -261,11 +259,13 @@ def main():
     val_loader = torch.utils.data.DataLoader(val_dataset,
                                              batch_size=BATCH_SIZE, shuffle=True, pin_memory=True)
 
-    vae = LargeFeatureVAE(dataset.max_selfies_length * dataset.feature_vector_length, dataset.max_selfies_length, EMBEDDING_DIM,
+    vae = LargeFeatureVAE(dataset.max_selfies_length * dataset.feature_vector_length, dataset.max_selfies_length,
+                          EMBEDDING_DIM,
                           hidden_dims=HIDDEN_DIMS)
     vae.to(dev)
 
-    vae = train_vae(train_loader, val_loader, vae, train=True, fname='models/vae.pt', patience=10, burnin=50, dataset=None)
+    vae = train_vae(train_loader, val_loader, vae, train=True, fname='models/vae.pt', patience=10, burnin=50,
+                    dataset=None)
 
     vae.eval()
     for mol in val_loader:
